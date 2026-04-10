@@ -182,6 +182,7 @@ export interface Project {
   id: string
   name: string
   framework: Framework
+  ownerId?: string
   createdAt: string
   updatedAt: string
   shell: ShellConfig

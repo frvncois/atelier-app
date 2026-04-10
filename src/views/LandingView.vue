@@ -1,173 +1,189 @@
 <script setup lang="ts">
-import { useRouter, RouterLink } from 'vue-router'
-import { Squares2X2Icon, TableCellsIcon, DocumentTextIcon } from '@heroicons/vue/24/outline'
-import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseCard from '@/components/ui/BaseCard.vue'
-import BaseBadge from '@/components/ui/BaseBadge.vue'
+import { useRouter } from 'vue-router'
+import { BaseButton, BaseBadge } from '@/components/ui'
+import { BoltIcon, ArrowDownTrayIcon, DocumentTextIcon } from '@heroicons/vue/24/outline'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
+
+const features = [
+  {
+    icon: BoltIcon,
+    title: 'No friction',
+    desc: 'Start speccing instantly. No account, no setup. Export your entire app structure whenever you\'re ready.',
+  },
+  {
+    icon: ArrowDownTrayIcon,
+    title: 'Import from any codebase',
+    desc: 'Point your AI assistant at an existing project. Atelier generates the import prompt — paste it back to sync your schema.',
+  },
+  {
+    icon: DocumentTextIcon,
+    title: 'AI-ready output',
+    desc: 'Six structured markdown files. LLMs and IDEs understand them immediately. Drop them into Cursor, Windsurf, or Claude Code.',
+  },
+]
+
+const steps = [
+  { num: '01', title: 'Spec it', desc: 'Define your views, components, data schemas, and shell — visually.' },
+  { num: '02', title: 'Export it', desc: 'Generate AI-ready markdown in one click. No account needed.' },
+  { num: '03', title: 'Build it', desc: 'Paste the output into your LLM IDE. Let it build.' },
+]
+
+function scrollToFeatures() {
+  document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })
+}
 </script>
 
 <template>
-  <div class="bg-neutral-950 text-neutral-100">
+  <div class="bg-neutral-950 min-h-screen text-neutral-100">
 
     <!-- Nav -->
-    <nav class="h-14 flex items-center px-8 gap-4 border-b border-white/[0.07]">
-      <!-- Logo -->
-      <div class="w-6 h-6 bg-lime-400 rounded flex items-center justify-center text-neutral-950 text-xs font-bold">A</div>
-      <span class="text-sm font-semibold text-neutral-100">Atelier</span>
-
-      <!-- Right side -->
-      <div class="ml-auto flex items-center gap-3">
-        <BaseButton variant="ghost" size="sm" label="Sign in" @click="router.push('/projects')" />
-        <BaseButton variant="default" size="sm" label="Get started" @click="router.push('/projects')" />
+    <nav class="fixed top-0 left-0 right-0 z-50 h-14 flex items-center px-8 gap-4 bg-neutral-950/80 backdrop-blur border-b border-white/[0.07]">
+      <div class="flex items-center gap-2.5 flex-1">
+        <div class="w-6 h-6 bg-lime-400 rounded flex items-center justify-center text-neutral-950 text-xs font-bold select-none">A</div>
+        <span class="text-sm font-semibold text-neutral-100">Atelier</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <BaseButton label="Log in" variant="ghost" size="sm" @click="router.push('/login')" />
+        <BaseButton label="Get started free" size="sm" @click="router.push('/editor')" />
       </div>
     </nav>
 
-    <!-- Hero Section -->
-    <section class="min-h-screen flex flex-col items-center justify-center text-center px-6 relative overflow-hidden bg-neutral-950">
-      <!-- Radial glow -->
-      <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div class="w-[600px] h-[400px] rounded-full bg-lime-400/5 blur-3xl"></div>
+    <!-- Hero -->
+    <section class="min-h-screen flex flex-col items-center justify-center text-center px-6 pt-14 relative overflow-hidden">
+      <!-- Lime glow -->
+      <div style="position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(200,240,74,0.06) 0%,transparent 70%);pointer-events:none;left:50%;top:50%;transform:translate(-50%,-50%)" aria-hidden="true"></div>
+
+      <div class="relative max-w-[680px] mx-auto">
+        <div class="mb-6">
+          <BaseBadge label="Now in beta" variant="accent" size="md" />
+        </div>
+        <h1 class="text-5xl sm:text-6xl font-semibold tracking-tight text-neutral-100 leading-tight mb-5">
+          Spec your app.<br />Export to code.
+        </h1>
+        <p class="text-lg text-neutral-400 max-w-lg mx-auto mb-8 leading-relaxed">
+          Build your app structure visually. Atelier turns views, components, and data schemas into AI-ready markdown your IDE can build from — no account needed.
+        </p>
+        <div class="flex items-center gap-3 justify-center">
+          <BaseButton label="Start building free" size="lg" @click="router.push('/editor')" />
+          <BaseButton label="See how it works" variant="outline" size="lg" @click="scrollToFeatures" />
+        </div>
+        <p class="mt-4 text-xs text-neutral-600">No account required · Export anytime · Works with any LLM IDE</p>
       </div>
 
-      <!-- Content -->
-      <div class="relative z-10 flex flex-col items-center">
-        <!-- Pill badge -->
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-lime-400/10 border border-lime-400/20 text-xs text-lime-600 mb-8">
-          <div class="w-1.5 h-1.5 rounded-full bg-lime-400"></div>
-          Now in beta
-        </div>
-
-        <!-- Headline -->
-        <h1 class="text-5xl font-semibold tracking-tight text-neutral-100 max-w-2xl mb-4">
-          Spec your app.<br/>Export to code.
-        </h1>
-
-        <!-- Subheadline -->
-        <p class="text-lg text-neutral-400 max-w-xl mb-8">
-          Atelier turns your app structure into AI-ready specs your IDE can build from.
-        </p>
-
-        <!-- CTA row -->
-        <div class="flex items-center gap-3 mb-16">
-          <BaseButton label="Start building" @click="router.push('/projects')" />
-          <BaseButton variant="outline" label="See how it works" />
-        </div>
-
-        <!-- Editor mockup -->
-        <div class="w-full max-w-[860px] h-[320px] bg-neutral-900 border border-white/[0.07] rounded-2xl overflow-hidden relative">
-          <!-- Editor top bar -->
-          <div class="h-10 bg-neutral-800 border-b border-white/[0.07] flex items-center px-4 gap-2">
-            <!-- Window dots -->
-            <div class="flex items-center gap-1.5">
-              <div class="w-2.5 h-2.5 rounded-full bg-neutral-700"></div>
-              <div class="w-2.5 h-2.5 rounded-full bg-neutral-700"></div>
-              <div class="w-2.5 h-2.5 rounded-full bg-neutral-700"></div>
+      <!-- App screenshot mockup -->
+      <div class="mt-16 w-full max-w-4xl mx-auto px-4 relative">
+        <div class="w-full rounded-xl overflow-hidden border border-white/[0.12] bg-neutral-900 shadow-2xl">
+          <!-- Browser chrome -->
+          <div class="h-9 bg-neutral-800 border-b border-white/[0.07] flex items-center px-4 gap-2">
+            <div class="flex gap-1.5">
+              <div class="w-3 h-3 rounded-full bg-neutral-600"></div>
+              <div class="w-3 h-3 rounded-full bg-neutral-600"></div>
+              <div class="w-3 h-3 rounded-full bg-neutral-600"></div>
             </div>
-            <!-- Skeleton pills -->
-            <div class="flex items-center gap-2 ml-4">
-              <div class="h-4 w-16 bg-neutral-700 rounded-full"></div>
-              <div class="h-4 w-20 bg-neutral-700 rounded-full"></div>
-              <div class="h-4 w-12 bg-neutral-700 rounded-full"></div>
+            <div class="flex-1 bg-neutral-700 rounded h-5 mx-4 flex items-center px-3">
+              <span class="text-[10px] text-neutral-500">atelier.app/editor</span>
             </div>
           </div>
-
-          <!-- Editor body -->
-          <div class="flex h-full">
-            <!-- Left sidebar stub -->
-            <div class="w-40 border-r border-white/[0.07] p-3 flex flex-col gap-2 shrink-0">
-              <div class="h-2 bg-neutral-700 rounded-full w-3/4"></div>
-              <div class="h-2 bg-neutral-800 rounded-full w-full"></div>
-              <div class="h-2 bg-neutral-800 rounded-full w-5/6"></div>
-              <div class="h-2 bg-neutral-800 rounded-full w-2/3"></div>
-              <div class="h-2 bg-neutral-700 rounded-full w-3/4 mt-2"></div>
-              <div class="h-2 bg-neutral-800 rounded-full w-full"></div>
-              <div class="h-2 bg-neutral-800 rounded-full w-4/5"></div>
-              <div class="h-2 bg-neutral-800 rounded-full w-3/5"></div>
-              <div class="h-2 bg-neutral-800 rounded-full w-full"></div>
+          <!-- Editor chrome -->
+          <div style="height:400px;display:flex;flex-direction:column;">
+            <!-- Top bar -->
+            <div class="h-12 border-b border-white/[0.07] flex items-center px-4 gap-3 bg-neutral-900 shrink-0">
+              <div class="w-5 h-5 bg-lime-400 rounded flex items-center justify-center text-neutral-950 text-[10px] font-bold">A</div>
+              <div class="w-px h-4 bg-white/[0.07]"></div>
+              <div class="h-5 px-2 rounded border border-white/[0.07] bg-neutral-800 text-[10px] text-neutral-400 flex items-center">My project</div>
+              <div class="ml-3 flex gap-1">
+                <div v-for="label in ['Layout','Views','Theme','Data']" :key="label" class="px-3 py-1 rounded-md text-[10px]" :class="label === 'Views' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-500'">{{ label }}</div>
+              </div>
+              <div class="ml-auto flex gap-2">
+                <div class="h-6 px-3 rounded bg-lime-400 text-neutral-950 text-[10px] font-medium flex items-center">Export</div>
+              </div>
             </div>
-
-            <!-- Main area -->
-            <div class="flex-1 p-4 grid grid-cols-2 gap-3 content-start">
-              <!-- Skeleton card 1 -->
-              <div class="bg-neutral-800 rounded-lg border border-white/[0.07] p-3 flex flex-col gap-2">
-                <div class="h-2 bg-neutral-700 rounded-full w-1/2"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-full"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-4/5"></div>
+            <!-- Body -->
+            <div class="flex flex-1 overflow-hidden">
+              <!-- Left sidebar -->
+              <div class="w-[200px] border-r border-white/[0.07] p-2 flex flex-col gap-1 shrink-0">
+                <div v-for="(view, i) in ['Dashboard','Users','Settings']" :key="view" class="px-2.5 py-2 rounded-md text-[10px]" :class="i === 0 ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-500'">
+                  <div class="flex items-center justify-between">
+                    <span>{{ view }}</span>
+                    <span class="text-neutral-600">{{ [3,2,1][i] }}</span>
+                  </div>
+                </div>
               </div>
-              <!-- Skeleton card 2 -->
-              <div class="bg-neutral-800 rounded-lg border border-white/[0.07] p-3 flex flex-col gap-2">
-                <div class="h-2 bg-neutral-700 rounded-full w-2/3"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-full"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-3/4"></div>
+              <!-- Center -->
+              <div class="flex-1 p-4 flex flex-col gap-3 overflow-hidden bg-neutral-950">
+                <div v-for="row in ['Stats row', 'Table row']" :key="row" class="bg-neutral-900 border border-white/[0.07] rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] text-neutral-500">{{ row }}</span>
+                  </div>
+                  <div class="flex gap-2">
+                    <div v-for="i in (row === 'Stats row' ? 3 : 1)" :key="i" class="flex-1 bg-neutral-800 rounded p-2 h-10"></div>
+                  </div>
+                </div>
               </div>
-              <!-- Skeleton card 3 -->
-              <div class="bg-neutral-800 rounded-lg border border-white/[0.07] p-3 flex flex-col gap-2">
-                <div class="h-2 bg-neutral-700 rounded-full w-3/5"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-full"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-5/6"></div>
-              </div>
-              <!-- Skeleton card 4 -->
-              <div class="bg-neutral-800 rounded-lg border border-white/[0.07] p-3 flex flex-col gap-2">
-                <div class="h-2 bg-neutral-700 rounded-full w-1/2"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-full"></div>
-                <div class="h-2 bg-neutral-700 rounded-full w-2/3"></div>
+              <!-- Right panel -->
+              <div class="w-[220px] border-l border-white/[0.07] p-3 flex flex-col gap-2 shrink-0">
+                <div class="h-4 bg-neutral-800 rounded w-3/4"></div>
+                <div v-for="i in 4" :key="i" class="flex justify-between items-center">
+                  <div class="h-2.5 bg-neutral-800 rounded w-1/3"></div>
+                  <div class="h-5 bg-neutral-800 rounded w-1/2"></div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+        <!-- Fade gradient -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(to bottom,transparent,#0a0a0a);pointer-events:none"></div>
+      </div>
+    </section>
+
+    <!-- Features section -->
+    <section id="features" class="py-24 px-6 max-w-5xl mx-auto">
+      <div class="text-center mb-16">
+        <p class="text-xs font-medium text-lime-600 uppercase tracking-widest mb-3">Why Atelier</p>
+        <h2 class="text-3xl font-semibold text-neutral-100 tracking-tight mb-4">From spec to code, faster</h2>
+        <p class="text-neutral-400 max-w-xl mx-auto">Stop writing documentation nobody reads. Atelier generates structured specs that AI tools can act on immediately.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div v-for="f in features" :key="f.title" class="bg-neutral-900 border border-white/[0.07] rounded-xl p-6">
+          <div class="w-8 h-8 rounded-lg bg-lime-400/10 flex items-center justify-center mb-4">
+            <component :is="f.icon" class="size-4 text-lime-400" />
+          </div>
+          <h3 class="text-sm font-semibold text-neutral-100 mb-2">{{ f.title }}</h3>
+          <p class="text-sm text-neutral-500 leading-relaxed">{{ f.desc }}</p>
         </div>
       </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="py-24 px-6 max-w-5xl mx-auto w-full">
-      <!-- Label -->
-      <p class="text-xs font-medium text-lime-600 uppercase tracking-widest mb-3">Why Atelier</p>
-
-      <!-- Title -->
-      <h2 class="text-3xl font-semibold text-neutral-100 mb-16">Built for the spec-first workflow</h2>
-
-      <!-- Feature cards grid -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-        <!-- Card 1: Define your shell -->
-        <BaseCard padding="lg">
-          <BaseBadge variant="accent" label="Shell" size="md" />
-          <div class="mt-3 mb-1 flex items-center gap-2">
-            <Squares2X2Icon class="size-4 text-lime-400" />
-            <h3 class="text-sm font-medium text-neutral-100">Define your shell</h3>
-          </div>
-          <p class="text-sm text-neutral-400">Set up navigation patterns, brand, and global layout in one place.</p>
-        </BaseCard>
-
-        <!-- Card 2: Spec every view -->
-        <BaseCard padding="lg">
-          <BaseBadge variant="accent" label="Views" size="md" />
-          <div class="mt-3 mb-1 flex items-center gap-2">
-            <TableCellsIcon class="size-4 text-lime-400" />
-            <h3 class="text-sm font-medium text-neutral-100">Spec every view</h3>
-          </div>
-          <p class="text-sm text-neutral-400">Lay out components row by row, bind data, and define actions.</p>
-        </BaseCard>
-
-        <!-- Card 3: Export AI-ready markdown -->
-        <BaseCard padding="lg">
-          <BaseBadge variant="accent" label="Export" size="md" />
-          <div class="mt-3 mb-1 flex items-center gap-2">
-            <DocumentTextIcon class="size-4 text-lime-400" />
-            <h3 class="text-sm font-medium text-neutral-100">Export AI-ready markdown</h3>
-          </div>
-          <p class="text-sm text-neutral-400">Get structured markdown files your AI coding assistant can build from.</p>
-        </BaseCard>
-
+    <!-- How it works -->
+    <section class="py-24 px-6 max-w-3xl mx-auto text-center">
+      <p class="text-xs font-medium text-lime-600 uppercase tracking-widest mb-3">How it works</p>
+      <h2 class="text-3xl font-semibold text-neutral-100 tracking-tight mb-16">Three steps to ship faster</h2>
+      <div class="grid grid-cols-3 gap-8">
+        <div v-for="step in steps" :key="step.num" class="flex flex-col items-center">
+          <div class="text-5xl font-semibold text-neutral-800 mb-3">{{ step.num }}</div>
+          <h3 class="text-sm font-medium text-neutral-300 mb-2">{{ step.title }}</h3>
+          <p class="text-xs text-neutral-600 leading-relaxed">{{ step.desc }}</p>
+        </div>
       </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="py-24 px-6 text-center">
+      <h2 class="text-3xl font-semibold text-neutral-100 mb-4">Ready to start?</h2>
+      <p class="text-neutral-400 mb-8">No account needed. Start building in seconds.</p>
+      <BaseButton label="Start building free" size="lg" @click="router.push('/editor')" />
     </section>
 
     <!-- Footer -->
-    <footer class="border-t border-white/[0.07] py-8 text-xs text-neutral-600 flex justify-between px-8">
-      <span>© 2025 Atelier. All rights reserved.</span>
-      <RouterLink to="/settings" class="hover:text-neutral-400 transition-colors">Settings</RouterLink>
+    <footer class="border-t border-white/[0.07] py-8 px-8 flex items-center justify-between text-xs text-neutral-600">
+      <span>© 2025 Atelier</span>
+      <div class="flex gap-4">
+        <span class="cursor-pointer hover:text-neutral-400 transition-colors" @click="router.push('/login')">Log in</span>
+        <span class="cursor-pointer hover:text-neutral-400 transition-colors" @click="router.push('/settings')">Settings</span>
+      </div>
     </footer>
 
   </div>

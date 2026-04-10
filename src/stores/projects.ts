@@ -1,77 +1,15 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
-import type { Project, Framework } from '@/types'
-import { createProject as makeProject, createView, createRow, createComponent } from '@/utils/factories'
+import { ref, computed } from 'vue'
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from './auth'
+import { createProject as makeProject } from '@/utils/factories'
 import { deepClone } from '@/utils/clone'
-
-const STORAGE_KEY = 'atelier_projects'
-
-function makeSeedProjects(): Project[] {
-  // Seed 1: Admin Dashboard (vue3)
-  const p1 = makeProject('Admin Dashboard', 'vue3')
-  // Override dates so they appear "2 days ago"
-  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
-  p1.createdAt = twoDaysAgo
-  p1.updatedAt = twoDaysAgo
-
-  // Add views/rows/components
-  const dashboard = createView('Dashboard', 0)
-  const statsRow = createRow('Stats', 0)
-  statsRow.components.push(
-    createComponent('UiStats', 'Revenue', 0),
-    createComponent('UiStats', 'Users', 1),
-    createComponent('UiStats', 'Orders', 2),
-  )
-  const tableRow = createRow('Recent orders', 1)
-  tableRow.components.push(createComponent('UiTable', 'Orders table', 0))
-  dashboard.rows.push(statsRow, tableRow)
-
-  const usersView = createView('Users', 1)
-  const usersRow = createRow('User list', 0)
-  usersRow.components.push(createComponent('UiTable', 'Users table', 0))
-  usersView.rows.push(usersRow)
-
-  const settingsView = createView('Settings', 2)
-  const settingsRow = createRow('Profile', 0)
-  settingsRow.components.push(createComponent('UiForm', 'Profile form', 0))
-  settingsView.rows.push(settingsRow)
-
-  p1.views = [dashboard, usersView, settingsView]
-
-  // Seed 2: Marketing Site (nuxt)
-  const p2 = makeProject('Marketing Site', 'nuxt')
-  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-  p2.createdAt = fiveDaysAgo
-  p2.updatedAt = fiveDaysAgo
-
-  const heroView = createView('Landing', 0)
-  const heroRow = createRow('Hero', 0)
-  heroRow.components.push(createComponent('UiCard', 'Hero block', 0))
-  heroView.rows.push(heroRow)
-  const featuresView = createView('Features', 1)
-  const pricingView = createView('Pricing', 2)
-  const blogView = createView('Blog', 3)
-  const contactView = createView('Contact', 4)
-  p2.views = [heroView, featuresView, pricingView, blogView, contactView]
-
-  // Seed 3: Mobile App (react)
-  const p3 = makeProject('Mobile App', 'react')
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  p3.createdAt = weekAgo
-  p3.updatedAt = weekAgo
-
-  const homeView = createView('Home', 0)
-  const profileView = createView('Profile', 1)
-  const feedView = createView('Feed', 2)
-  const searchView = createView('Search', 3)
-  p3.views = [homeView, profileView, feedView, searchView]
-
-  return [p1, p2, p3]
-}
+import type { Project, Framework } from '@/types'
 
 export const useProjectStore = defineStore('projects', () => {
   const projects = ref<Project[]>([])
   const activeProjectId = ref<string | null>(null)
+  const loading = ref(false)
 
   const activeProject = computed(() =>
     projects.value.find(p => p.id === activeProjectId.value)
@@ -83,82 +21,181 @@ export const useProjectStore = defineStore('projects', () => {
     )
   )
 
-  function loadFromStorage(): void {
+  // ─── Fetch all projects for the current user ──────────────────
+  async function fetchProjects(): Promise<void> {
+    loading.value = true
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        projects.value = JSON.parse(raw) as Project[]
-      } else {
-        projects.value = makeSeedProjects()
-        saveToStorage()
-      }
-    } catch {
-      projects.value = makeSeedProjects()
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, framework, owner_id, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+
+      if (error) throw error
+
+      projects.value = (data ?? []).map(row => ({
+        id: row.id,
+        name: row.name,
+        framework: row.framework as Framework,
+        ownerId: row.owner_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        shell: {} as any,
+        views: [],
+        theme: {} as any,
+        schemas: [],
+        actions: [],
+      }))
+    } finally {
+      loading.value = false
     }
   }
 
-  function saveToStorage(): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects.value))
+  // ─── Load full project content ────────────────────────────────
+  async function loadProjectContent(id: string): Promise<void> {
+    const { data, error } = await supabase
+      .from('project_content')
+      .select('shell, views, theme, schemas, actions')
+      .eq('project_id', id)
+      .single()
+
+    if (error || !data) return
+
+    const idx = projects.value.findIndex(p => p.id === id)
+    if (idx === -1) return
+
+    projects.value[idx] = {
+      ...projects.value[idx]!,
+      shell: data.shell,
+      views: data.views,
+      theme: data.theme,
+      schemas: data.schemas,
+      actions: data.actions,
+    }
   }
 
-  function createProject(name: string, framework: Framework): Project {
-    const project = makeProject(name, framework)
+  // ─── Create project ──────────────────────────────────────────
+  async function createProject(name: string, framework: Framework): Promise<Project> {
+    const authStore = useAuthStore()
+    if (!authStore.user) throw new Error('Not authenticated')
+
+    const local = makeProject(name, framework)
+
+    const { data: projRow, error: projError } = await supabase
+      .from('projects')
+      .insert({ id: local.id, name, framework, owner_id: authStore.user.id })
+      .select()
+      .single()
+
+    if (projError) throw projError
+
+    const { error: contentError } = await supabase
+      .from('project_content')
+      .insert({
+        project_id: local.id,
+        shell: local.shell,
+        views: local.views,
+        theme: local.theme,
+        schemas: local.schemas,
+        actions: local.actions,
+      })
+
+    if (contentError) throw contentError
+
+    const project: Project = {
+      ...local,
+      ownerId: authStore.user.id,
+      createdAt: projRow.created_at,
+      updatedAt: projRow.updated_at,
+    }
+
     projects.value.unshift(project)
     activeProjectId.value = project.id
-    saveToStorage()
     return project
   }
 
-  function updateProject(id: string, patch: Partial<Project>): void {
+  // ─── Update project ──────────────────────────────────────────
+  async function updateProject(id: string, patch: Partial<Project>): Promise<void> {
     const idx = projects.value.findIndex(p => p.id === id)
     if (idx === -1) return
-    projects.value[idx] = {
-      ...projects.value[idx],
-      ...patch,
-      updatedAt: new Date().toISOString(),
-    } as Project
-    saveToStorage()
+
+    const now = new Date().toISOString()
+    projects.value[idx] = { ...projects.value[idx]!, ...patch, updatedAt: now }
+
+    const metaFields: Record<string, unknown> = {}
+    const contentFields: Record<string, unknown> = {}
+
+    if (patch.name !== undefined)      metaFields.name = patch.name
+    if (patch.framework !== undefined) metaFields.framework = patch.framework
+    if (patch.shell !== undefined)     contentFields.shell = patch.shell
+    if (patch.views !== undefined)     contentFields.views = patch.views
+    if (patch.theme !== undefined)     contentFields.theme = patch.theme
+    if (patch.schemas !== undefined)   contentFields.schemas = patch.schemas
+    if (patch.actions !== undefined)   contentFields.actions = patch.actions
+
+    const ops: PromiseLike<unknown>[] = []
+
+    if (Object.keys(metaFields).length > 0) {
+      ops.push(supabase.from('projects').update(metaFields).eq('id', id))
+    }
+
+    if (Object.keys(contentFields).length > 0) {
+      ops.push(
+        supabase.from('project_content').update(contentFields).eq('project_id', id)
+      )
+    }
+
+    await Promise.all(ops)
   }
 
-  function deleteProject(id: string): void {
+  // ─── Update local only (used by Realtime handler) ─────────────
+  function updateProjectLocal(id: string, patch: Partial<Project>): void {
+    const idx = projects.value.findIndex(p => p.id === id)
+    if (idx === -1) return
+    projects.value[idx] = { ...projects.value[idx]!, ...patch }
+  }
+
+  // ─── Delete project ──────────────────────────────────────────
+  async function deleteProject(id: string): Promise<void> {
+    const { error } = await supabase.from('projects').delete().eq('id', id)
+    if (error) throw error
     projects.value = projects.value.filter(p => p.id !== id)
     if (activeProjectId.value === id) activeProjectId.value = null
-    saveToStorage()
   }
 
-  function duplicateProject(id: string): Project {
+  // ─── Duplicate project ───────────────────────────────────────
+  async function duplicateProject(id: string): Promise<Project> {
     const original = projects.value.find(p => p.id === id)
-    if (!original) throw new Error(`Project ${id} not found`)
+    if (!original) throw new Error('Project not found')
+
     const copy = deepClone(original)
-    copy.id = crypto.randomUUID()
-    copy.name = `${original.name} (copy)`
-    const now = new Date().toISOString()
-    copy.createdAt = now
-    copy.updatedAt = now
-    projects.value.unshift(copy)
-    saveToStorage()
-    return copy
+    const created = await createProject(`${original.name} (copy)`, copy.framework)
+    // Copy content from original
+    await updateProject(created.id, {
+      shell: copy.shell,
+      views: copy.views,
+      theme: copy.theme,
+      schemas: copy.schemas,
+      actions: copy.actions,
+    })
+    return created
   }
 
+  // ─── Set active project ──────────────────────────────────────
   function setActiveProject(id: string): void {
     activeProjectId.value = id
   }
-
-  // Auto-save on deep change
-  watch(projects, saveToStorage, { deep: true })
-
-  // Load on store init
-  loadFromStorage()
 
   return {
     projects,
     activeProjectId,
     activeProject,
     sortedProjects,
-    loadFromStorage,
-    saveToStorage,
+    loading,
+    fetchProjects,
+    loadProjectContent,
     createProject,
     updateProject,
+    updateProjectLocal,
     deleteProject,
     duplicateProject,
     setActiveProject,
