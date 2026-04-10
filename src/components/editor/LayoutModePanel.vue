@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { SidebarPanel, SectionHeader, FieldGroup, FieldRow, BaseInput, BaseSelect, BaseToggle, ShellSectionItem, NavItemRow, PatternCard } from '@/components/ui'
+import LayoutPreview from './previews/LayoutPreview.vue'
 import { Squares2X2Icon, SparklesIcon, Bars3Icon, UserCircleIcon, BoltIcon, PlusIcon, HomeIcon, MagnifyingGlassIcon, BellIcon } from '@heroicons/vue/24/outline'
 import { useProjectStore } from '@/stores/projects'
 import { useEditorStore } from '@/stores/editor'
@@ -364,5 +365,7 @@ const saveUserMenu = useDebounceFn((patch: Partial<ShellConfig['userMenu']>) => 
       </template>
 
     </div>
+
+    <LayoutPreview />
   </div>
 </template>

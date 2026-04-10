@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { SidebarPanel, SectionHeader, FieldGroup, FieldRow, BaseSelect, BaseSlider, BaseToggle, ColorSwatch } from '@/components/ui'
+import ThemePreview from './previews/ThemePreview.vue'
 import { useProjectStore } from '@/stores/projects'
 import { useEditorStore } from '@/stores/editor'
 import { useHistory } from '@/composables/useHistory'
@@ -235,5 +236,7 @@ function setMonoFont(val: string) {
       </template>
 
     </div>
+
+    <ThemePreview />
   </div>
 </template>
