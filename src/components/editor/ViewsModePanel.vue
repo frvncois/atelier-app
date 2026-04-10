@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { SidebarPanel, RightPanel, SectionHeader, PropRow, BaseButton, BaseInput, BaseSelect, BaseToggle, BaseBadge, ViewItem, RowBlock, CompCard } from '@/components/ui'
-import { PlusIcon, TrashIcon, DocumentDuplicateIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ref, computed, watch, onMounted } from 'vue'
+import { SidebarPanel, RightPanel, SectionHeader, PropRow, BaseButton, BaseInput, BaseSelect, BaseToggle, BaseBadge, BaseModal, ViewItem, RowBlock, CompCard } from '@/components/ui'
+import { PlusIcon, TrashIcon, DocumentDuplicateIcon, XMarkIcon, PencilSquareIcon, ChevronDownIcon } from '@heroicons/vue/24/outline'
 import { useProjectStore } from '@/stores/projects'
 import { useEditorStore } from '@/stores/editor'
 import { useHistory } from '@/composables/useHistory'
@@ -53,6 +53,46 @@ function commitAddView() {
   newViewName.value = ''
 }
 
+// ─── View delete ──────────────────────────────────────────────
+const viewToDelete = ref<string | null>(null)
+
+function confirmDeleteView(viewId: string) {
+  viewToDelete.value = viewId
+}
+
+function executeDeleteView() {
+  if (!viewToDelete.value || !project.value) return
+  snapshot()
+  const remaining = project.value.views.filter(v => v.id !== viewToDelete.value)
+  projectStore.updateProject(project.value.id, { views: remaining })
+  if (editorStore.activeViewId === viewToDelete.value) {
+    editorStore.setActiveView(remaining[0]?.id ?? '')
+  }
+  viewToDelete.value = null
+}
+
+// ─── View rename ──────────────────────────────────────────────
+const renamingViewId = ref<string | null>(null)
+const renameViewValue = ref('')
+
+function startRenameView(view: { id: string; name: string }) {
+  renamingViewId.value = view.id
+  renameViewValue.value = view.name
+}
+
+function commitRenameView() {
+  if (!renamingViewId.value || !renameViewValue.value.trim() || !project.value) {
+    renamingViewId.value = null
+    return
+  }
+  snapshot()
+  const updatedViews = project.value.views.map(v =>
+    v.id === renamingViewId.value ? { ...v, name: renameViewValue.value.trim() } : v
+  )
+  projectStore.updateProject(project.value.id, { views: updatedViews })
+  renamingViewId.value = null
+}
+
 // ─── Row CRUD ─────────────────────────────────────────────────
 function addRow() {
   if (!project.value || !activeView.value) return
@@ -79,6 +119,30 @@ function toggleRowCollapsed(rowId: string) {
     collapsed: !row.collapsed,
   })
   projectStore.updateProject(project.value.id, { views: updatedViews })
+}
+
+// ─── Row rename ───────────────────────────────────────────────
+const renamingRowId = ref<string | null>(null)
+const renameRowValue = ref('')
+
+function startRenameRow(row: { id: string; label: string }) {
+  renamingRowId.value = row.id
+  renameRowValue.value = row.label
+}
+
+function commitRenameRow() {
+  if (!renamingRowId.value || !renameRowValue.value.trim() || !project.value || !activeView.value) {
+    renamingRowId.value = null
+    return
+  }
+  const updatedViews = patchRowInViews(
+    project.value.views,
+    activeView.value.id,
+    renamingRowId.value,
+    { label: renameRowValue.value.trim() }
+  )
+  projectStore.updateProject(project.value.id, { views: updatedViews })
+  renamingRowId.value = null
 }
 
 // ─── Drag sort for rows ────────────────────────────────────────
@@ -155,6 +219,7 @@ function updateBinding(propName: string, schemaField: string) {
     bindings: { ...selectedComponent.value.bindings, [propName]: schemaField },
   })
   projectStore.updateProject(project.value.id, { views: updatedViews })
+  bindingPropName.value = ''
 }
 
 function removeBinding(propName: string) {
@@ -175,6 +240,13 @@ const allSchemaFields = computed(() =>
   })))
 )
 
+// ─── Binding prop name (Fix 7) ────────────────────────────────
+const bindingPropName = ref('')
+
+watch(selectedComponentId, () => {
+  bindingPropName.value = ''
+})
+
 // ─── Actions ──────────────────────────────────────────────────
 const actionTriggers: { value: ActionTrigger; label: string }[] = [
   { value: 'onClick', label: 'onClick' },
@@ -190,6 +262,8 @@ const actionTypes: { value: ActionType; label: string }[] = [
   { value: 'state.set', label: 'state.set' },
   { value: 'emit', label: 'emit' },
 ]
+
+const expandedActionId = ref<string | null>(null)
 
 function addAction() {
   if (!selectedComponent.value || !project.value) return
@@ -212,6 +286,7 @@ function addAction() {
     views: updatedViews,
     actions: [...project.value.actions, actionDef],
   })
+  expandedActionId.value = componentAction.id
 }
 
 function removeAction(actionId: string) {
@@ -226,7 +301,14 @@ function removeAction(actionId: string) {
   })
 }
 
-// Helper to get action def for a component action
+function updateActionDef(actionId: string, patch: { type?: ActionType; config?: Record<string, unknown> }) {
+  if (!project.value) return
+  const updated = project.value.actions.map(a =>
+    a.id === actionId ? { ...a, ...patch } : a
+  )
+  projectStore.updateProject(project.value.id, { actions: updated })
+}
+
 function getActionDef(actionId: string) {
   return project.value?.actions.find(a => a.id === actionId)
 }
@@ -247,14 +329,36 @@ function getActionDef(actionId: string) {
       </template>
 
       <div class="p-2 flex flex-col gap-0.5">
-        <ViewItem
+        <div
           v-for="view in views"
           :key="view.id"
-          :name="view.name"
-          :component-count="view.rows.reduce((acc, r) => acc + r.components.length, 0)"
-          :active="activeViewId === view.id"
-          @click="editorStore.setActiveView(view.id)"
-        />
+          class="relative group/view"
+        >
+          <input
+            v-if="renamingViewId === view.id"
+            v-model="renameViewValue"
+            autofocus
+            class="w-full bg-neutral-800 border border-lime-400/40 rounded-md px-2 py-1 text-xs text-neutral-100 outline-none mx-1"
+            @blur="commitRenameView"
+            @keydown.enter="commitRenameView"
+            @keydown.escape="renamingViewId = null"
+          />
+          <ViewItem
+            v-else
+            :name="view.name"
+            :component-count="view.rows.reduce((acc, r) => acc + r.components.length, 0)"
+            :active="activeViewId === view.id"
+            @click="editorStore.setActiveView(view.id)"
+            @dblclick="startRenameView(view)"
+          />
+          <button
+            v-if="renamingViewId !== view.id"
+            class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/view:opacity-100 transition-opacity p-1 text-neutral-600 hover:text-red-400 cursor-pointer"
+            @click.stop="confirmDeleteView(view.id)"
+          >
+            <TrashIcon class="size-3" />
+          </button>
+        </div>
 
         <!-- Inline add view input -->
         <div v-if="addingView" class="px-1 pt-1">
@@ -291,7 +395,20 @@ function getActionDef(actionId: string) {
           @drop="onDrop"
           @dragend="onDragEnd"
         >
+          <!-- Row rename input -->
+          <div v-if="renamingRowId === row.id" class="mb-1 px-1">
+            <input
+              v-model="renameRowValue"
+              autofocus
+              class="w-full bg-neutral-800 border border-lime-400/40 rounded-md px-2 py-1 text-xs text-neutral-100 outline-none"
+              @blur="commitRenameRow"
+              @keydown.enter="commitRenameRow"
+              @keydown.escape="renamingRowId = null"
+            />
+          </div>
+
           <RowBlock
+            v-else
             :label="row.label"
             :tag="row.tag"
             :component-count="row.components.length"
@@ -299,6 +416,12 @@ function getActionDef(actionId: string) {
             @toggle="toggleRowCollapsed(row.id)"
           >
             <template #actions>
+              <button
+                @click.stop="startRenameRow(row)"
+                class="p-1 text-neutral-600 hover:text-neutral-300 transition-colors cursor-pointer rounded"
+              >
+                <PencilSquareIcon class="size-3.5" />
+              </button>
               <button
                 @click.stop="deleteRow(row.id)"
                 class="p-1 text-neutral-600 hover:text-red-400 transition-colors cursor-pointer rounded"
@@ -413,7 +536,6 @@ function getActionDef(actionId: string) {
             @update:model-value="updateProp('paginated', $event)"
           />
         </PropRow>
-        <!-- Fallback for components with no known props -->
         <p v-if="Object.keys(selectedComponent.props).length === 0" class="text-xs text-neutral-600 px-2 py-3">
           No configurable props for {{ selectedComponent.type }}
         </p>
@@ -439,16 +561,28 @@ function getActionDef(actionId: string) {
           </div>
         </PropRow>
 
-        <!-- Add binding -->
-        <div class="mt-2 px-1">
-          <p class="text-[10px] text-neutral-600 mb-1">Bind a field</p>
-          <BaseSelect
-            v-if="allSchemaFields.length > 0"
-            model-value=""
-            :options="[{value:'',label:'Select field...'}, ...allSchemaFields]"
-            @update:model-value="(v) => v && updateBinding('value', v)"
+        <!-- Add binding (two-step) -->
+        <div class="mt-3 px-1 flex flex-col gap-2">
+          <p class="text-[10px] text-neutral-600">Add binding</p>
+          <BaseInput
+            v-model="bindingPropName"
+            placeholder="Prop name e.g. value, title"
+            mono
           />
-          <p v-else class="text-[10px] text-neutral-600 italic">No schemas defined. Add schemas in the Data mode.</p>
+          <BaseSelect
+            v-if="bindingPropName.trim()"
+            model-value=""
+            :options="[{ value: '', label: 'Select schema field...' }, ...allSchemaFields]"
+            @update:model-value="(v) => {
+              if (v && bindingPropName.trim()) {
+                updateBinding(bindingPropName.trim(), v)
+                bindingPropName = ''
+              }
+            }"
+          />
+          <p v-if="allSchemaFields.length === 0" class="text-[10px] text-neutral-600 italic">
+            No schemas defined. Add schemas in the Data mode.
+          </p>
         </div>
       </div>
 
@@ -458,21 +592,116 @@ function getActionDef(actionId: string) {
         <div
           v-for="compAction in selectedComponent.actions"
           :key="compAction.id"
-          class="bg-neutral-800 border border-white/[0.07] rounded-md p-2.5"
+          class="bg-neutral-800 border border-white/[0.07] rounded-md overflow-hidden mb-2"
         >
-          <div class="flex items-center justify-between mb-1.5">
+          <!-- Header row: click to expand -->
+          <div
+            class="flex items-center justify-between px-2.5 py-2 cursor-pointer"
+            @click="expandedActionId = expandedActionId === compAction.id ? null : compAction.id"
+          >
             <div class="flex items-center gap-2">
               <BaseBadge :label="compAction.trigger" variant="default" size="sm" mono />
               <span class="text-[10px] text-neutral-500">→</span>
-              <BaseBadge :label="getActionDef(compAction.actionId)?.type ?? 'unknown'" variant="blue" size="sm" mono />
+              <BaseBadge
+                :label="getActionDef(compAction.actionId)?.type ?? 'unknown'"
+                variant="purple"
+                size="sm"
+                mono
+              />
             </div>
-            <button @click="removeAction(compAction.actionId)" class="text-neutral-600 hover:text-red-400 cursor-pointer">
-              <XMarkIcon class="size-3" />
-            </button>
+            <div class="flex items-center gap-1">
+              <ChevronDownIcon
+                class="size-3 text-neutral-600 transition-transform"
+                :class="expandedActionId === compAction.id ? 'rotate-180' : ''"
+              />
+              <button @click.stop="removeAction(compAction.actionId)" class="text-neutral-600 hover:text-red-400 cursor-pointer p-0.5">
+                <XMarkIcon class="size-3" />
+              </button>
+            </div>
           </div>
-          <p v-if="getActionDef(compAction.actionId)?.config && Object.keys(getActionDef(compAction.actionId)!.config).length > 0" class="font-mono text-[10px] text-neutral-500">
-            {{ JSON.stringify(getActionDef(compAction.actionId)!.config) }}
-          </p>
+
+          <!-- Expanded edit form -->
+          <div v-if="expandedActionId === compAction.id" class="px-2.5 pb-2.5 flex flex-col gap-2 border-t border-white/[0.07] pt-2">
+            <!-- Trigger -->
+            <PropRow label="Trigger">
+              <BaseSelect
+                :model-value="compAction.trigger"
+                :options="actionTriggers"
+                @update:model-value="(v) => {
+                  if (!project || !selectedComponent) return
+                  const updated = patchComponentInViews(project.views, selectedComponent.id, {
+                    actions: selectedComponent.actions.map(a =>
+                      a.id === compAction.id ? { ...a, trigger: v as ActionTrigger } : a
+                    )
+                  })
+                  projectStore.updateProject(project.id, { views: updated })
+                }"
+              />
+            </PropRow>
+
+            <!-- Action type -->
+            <PropRow label="Type">
+              <BaseSelect
+                :model-value="getActionDef(compAction.actionId)?.type ?? 'router.push'"
+                :options="actionTypes"
+                @update:model-value="(v) => updateActionDef(compAction.actionId, { type: v as ActionType, config: {} })"
+              />
+            </PropRow>
+
+            <!-- Dynamic config: router.push -->
+            <template v-if="getActionDef(compAction.actionId)?.type === 'router.push'">
+              <PropRow label="Path">
+                <BaseInput
+                  :model-value="String(getActionDef(compAction.actionId)?.config?.path ?? '')"
+                  placeholder="/dashboard"
+                  mono
+                  @update:model-value="(v) => updateActionDef(compAction.actionId, { config: { path: v } })"
+                />
+              </PropRow>
+            </template>
+
+            <!-- Dynamic config: api.call -->
+            <template v-else-if="getActionDef(compAction.actionId)?.type === 'api.call'">
+              <PropRow label="Method">
+                <BaseSelect
+                  :model-value="String(getActionDef(compAction.actionId)?.config?.method ?? 'GET')"
+                  :options="[{value:'GET',label:'GET'},{value:'POST',label:'POST'},{value:'PUT',label:'PUT'},{value:'PATCH',label:'PATCH'},{value:'DELETE',label:'DELETE'}]"
+                  @update:model-value="(v) => updateActionDef(compAction.actionId, { config: { ...getActionDef(compAction.actionId)?.config, method: v } })"
+                />
+              </PropRow>
+              <PropRow label="Endpoint">
+                <BaseInput
+                  :model-value="String(getActionDef(compAction.actionId)?.config?.endpoint ?? '')"
+                  placeholder="/api/resource/:id"
+                  mono
+                  @update:model-value="(v) => updateActionDef(compAction.actionId, { config: { ...getActionDef(compAction.actionId)?.config, endpoint: v } })"
+                />
+              </PropRow>
+            </template>
+
+            <!-- Dynamic config: dialog.open -->
+            <template v-else-if="getActionDef(compAction.actionId)?.type === 'dialog.open'">
+              <PropRow label="Target">
+                <BaseSelect
+                  :model-value="String(getActionDef(compAction.actionId)?.config?.viewId ?? '')"
+                  :options="[{value:'',label:'Select view...'}, ...views.map(v => ({value: v.id, label: v.name}))]"
+                  @update:model-value="(v) => updateActionDef(compAction.actionId, { config: { viewId: v } })"
+                />
+              </PropRow>
+            </template>
+
+            <!-- Dynamic config: emit -->
+            <template v-else-if="getActionDef(compAction.actionId)?.type === 'emit'">
+              <PropRow label="Event">
+                <BaseInput
+                  :model-value="String(getActionDef(compAction.actionId)?.config?.event ?? '')"
+                  placeholder="event-name"
+                  mono
+                  @update:model-value="(v) => updateActionDef(compAction.actionId, { config: { event: v } })"
+                />
+              </PropRow>
+            </template>
+          </div>
         </div>
 
         <!-- Empty state -->
@@ -491,5 +720,26 @@ function getActionDef(actionId: string) {
       @close="paletteOpen = false"
       @add="handleAddComponent"
     />
+
+    <!-- Delete view confirmation modal -->
+    <BaseModal
+      :open="viewToDelete !== null"
+      title="Delete view"
+      size="sm"
+      @close="viewToDelete = null"
+    >
+      <div class="px-5 py-4">
+        <p class="text-sm text-neutral-300 mb-1">
+          Delete <span class="font-medium text-neutral-100">{{ views.find(v => v.id === viewToDelete)?.name }}</span>?
+        </p>
+        <p class="text-xs text-neutral-600">All rows and components inside will be removed. This cannot be undone.</p>
+      </div>
+      <template #footer>
+        <div class="flex gap-2 px-5 pb-4">
+          <BaseButton label="Cancel" variant="ghost" size="sm" class="flex-1" @click="viewToDelete = null" />
+          <BaseButton label="Delete" variant="danger" size="sm" class="flex-1" @click="executeDeleteView" />
+        </div>
+      </template>
+    </BaseModal>
   </div>
 </template>

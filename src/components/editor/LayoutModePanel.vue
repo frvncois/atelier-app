@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { SidebarPanel, SectionHeader, FieldGroup, FieldRow, BaseButton, BaseInput, BaseSelect, BaseToggle, ShellSectionItem, NavItemRow, PatternCard } from '@/components/ui'
-import { Squares2X2Icon, SparklesIcon, Bars3Icon, UserCircleIcon, BoltIcon, PlusIcon, HomeIcon, UsersIcon, Cog6ToothIcon, MagnifyingGlassIcon, BellIcon } from '@heroicons/vue/24/outline'
+import { ref, computed } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
+import { SidebarPanel, SectionHeader, FieldGroup, FieldRow, BaseInput, BaseSelect, BaseToggle, ShellSectionItem, NavItemRow, PatternCard } from '@/components/ui'
+import { Squares2X2Icon, SparklesIcon, Bars3Icon, UserCircleIcon, BoltIcon, PlusIcon, HomeIcon, MagnifyingGlassIcon, BellIcon } from '@heroicons/vue/24/outline'
 import { useProjectStore } from '@/stores/projects'
 import { useEditorStore } from '@/stores/editor'
 import { useHistory } from '@/composables/useHistory'
-import type { NavPattern } from '@/types'
+import { createNavItem } from '@/utils/factories'
+import type { NavPattern, ShellConfig } from '@/types'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -28,16 +30,51 @@ const sidebarSections = [
   { id: 'global', label: 'Global elements', description: 'App-wide UI', icon: BoltIcon },
 ]
 
-const sidebarNavItems = [
-  { label: 'Dashboard', target: 'DashboardView', targetVariant: 'view' as const, icon: HomeIcon },
-  { label: 'Users', target: 'UsersView', targetVariant: 'view' as const, icon: UsersIcon },
-  { label: 'Settings', target: 'SettingsView', targetVariant: 'view' as const, icon: Cog6ToothIcon },
-]
-const topNavItems = [
-  { label: 'Search', target: 'searchAction', targetVariant: 'action' as const, icon: MagnifyingGlassIcon },
-  { label: 'Notifications', target: 'NotificationCenter', targetVariant: 'component' as const, icon: BellIcon },
-]
+// ─── Nav items from store ──────────────────────────────────────
+const sidebarItems = computed(() =>
+  [...(shell.value?.sidebarItems ?? [])].sort((a, b) => a.order - b.order)
+)
+const topBarItems = computed(() =>
+  [...(shell.value?.topBarItems ?? [])].sort((a, b) => a.order - b.order)
+)
 
+const addingTo = ref<'sidebar' | 'topbar' | null>(null)
+const newItemLabel = ref('')
+const newItemIcon = ref('')
+
+function commitAddItem(target: 'sidebar' | 'topbar') {
+  if (!newItemLabel.value.trim() || !projectStore.activeProject) return
+  snapshot()
+  const item = createNavItem(
+    newItemLabel.value.trim(),
+    newItemIcon.value.trim() || 'HomeIcon',
+    target === 'sidebar'
+      ? (shell.value?.sidebarItems.length ?? 0)
+      : (shell.value?.topBarItems.length ?? 0),
+  )
+  const s = projectStore.activeProject.shell
+  projectStore.updateProject(projectStore.activeProject.id, {
+    shell: target === 'sidebar'
+      ? { ...s, sidebarItems: [...s.sidebarItems, item] }
+      : { ...s, topBarItems: [...s.topBarItems, item] },
+  })
+  newItemLabel.value = ''
+  newItemIcon.value = ''
+  addingTo.value = null
+}
+
+function removeNavItem(id: string, target: 'sidebar' | 'topbar') {
+  if (!projectStore.activeProject) return
+  snapshot()
+  const s = projectStore.activeProject.shell
+  projectStore.updateProject(projectStore.activeProject.id, {
+    shell: target === 'sidebar'
+      ? { ...s, sidebarItems: s.sidebarItems.filter(i => i.id !== id) }
+      : { ...s, topBarItems: s.topBarItems.filter(i => i.id !== id) },
+  })
+}
+
+// ─── Nav pattern ──────────────────────────────────────────────
 function setPattern(p: NavPattern) {
   snapshot()
   if (!projectStore.activeProject) return
@@ -72,6 +109,26 @@ function setShowBorder(val: boolean) {
     shell: { ...s, topBar: { ...s.topBar, border: val } },
   })
 }
+
+// ─── Brand ────────────────────────────────────────────────────
+const saveBrand = useDebounceFn((patch: Partial<ShellConfig['brand']>) => {
+  if (!projectStore.activeProject) return
+  snapshot()
+  const s = projectStore.activeProject.shell
+  projectStore.updateProject(projectStore.activeProject.id, {
+    shell: { ...s, brand: { ...s.brand, ...patch } },
+  })
+}, 400)
+
+// ─── User menu ────────────────────────────────────────────────
+const saveUserMenu = useDebounceFn((patch: Partial<ShellConfig['userMenu']>) => {
+  if (!projectStore.activeProject) return
+  snapshot()
+  const s = projectStore.activeProject.shell
+  projectStore.updateProject(projectStore.activeProject.id, {
+    shell: { ...s, userMenu: { ...s.userMenu, ...patch } },
+  })
+}, 400)
 </script>
 
 <template>
@@ -143,32 +200,121 @@ function setShowBorder(val: boolean) {
         <SectionHeader title="Brand" />
         <div class="flex-1 overflow-y-auto p-6 max-w-md">
           <FieldGroup label="Identity">
-            <FieldRow label="App name"><BaseInput :model-value="shell?.brand?.appName ?? ''" /></FieldRow>
-            <FieldRow label="Logo type">
-              <BaseSelect :model-value="shell?.brand?.logoType ?? 'icon-text'" :options="[{value:'text',label:'Text only'},{value:'icon',label:'Icon only'},{value:'icon-text',label:'Icon + Text'}]" />
+            <FieldRow label="App name">
+              <BaseInput
+                :model-value="shell?.brand?.appName ?? ''"
+                @update:model-value="saveBrand({ appName: $event })"
+              />
             </FieldRow>
-            <FieldRow label="Icon"><BaseInput :model-value="shell?.brand?.icon ?? ''" placeholder="Letter or emoji" /></FieldRow>
-            <FieldRow label="Favicon"><BaseInput :model-value="shell?.brand?.faviconUrl ?? ''" placeholder="/favicon.ico" /></FieldRow>
+            <FieldRow label="Logo type">
+              <BaseSelect
+                :model-value="shell?.brand?.logoType ?? 'icon-text'"
+                :options="[
+                  { value: 'text', label: 'Text only' },
+                  { value: 'icon', label: 'Icon only' },
+                  { value: 'icon-text', label: 'Icon + Text' },
+                  { value: 'image', label: 'Image' },
+                ]"
+                @update:model-value="saveBrand({ logoType: $event as any })"
+              />
+            </FieldRow>
+            <FieldRow label="Icon">
+              <BaseInput
+                :model-value="shell?.brand?.icon ?? ''"
+                placeholder="e.g. HomeIcon"
+                @update:model-value="saveBrand({ icon: $event })"
+              />
+            </FieldRow>
+            <FieldRow label="Favicon">
+              <BaseInput
+                :model-value="shell?.brand?.faviconUrl ?? ''"
+                placeholder="/favicon.ico"
+                @update:model-value="saveBrand({ faviconUrl: $event })"
+              />
+            </FieldRow>
           </FieldGroup>
         </div>
       </template>
 
       <!-- Nav items section -->
       <template v-else-if="activeSection === 'nav-items'">
-        <SectionHeader title="Nav items">
-          <template #actions>
-            <BaseButton label="Add item" :icon-before="PlusIcon" size="sm" variant="outline" />
-          </template>
-        </SectionHeader>
+        <SectionHeader title="Nav items" />
         <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6 max-w-md">
           <FieldGroup label="Sidebar">
             <div class="flex flex-col gap-2">
-              <NavItemRow v-for="item in sidebarNavItems" :key="item.label" :icon="item.icon" :label="item.label" :target="item.target" :target-variant="item.targetVariant" />
+              <NavItemRow
+                v-for="item in sidebarItems"
+                :key="item.id"
+                :icon="HomeIcon"
+                :label="item.label"
+                :target="item.targetViewId ?? 'unlinked'"
+                target-variant="view"
+                @edit="() => {}"
+                @remove="removeNavItem(item.id, 'sidebar')"
+              />
+
+              <div v-if="addingTo === 'sidebar'" class="flex gap-2 mt-1">
+                <input
+                  v-model="newItemLabel"
+                  autofocus
+                  placeholder="Label..."
+                  class="flex-1 bg-neutral-800 border border-white/[0.12] rounded-md px-2 py-1.5 text-xs text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-lime-400/40"
+                  @keydown.enter="commitAddItem('sidebar')"
+                  @keydown.escape="addingTo = null"
+                />
+                <input
+                  v-model="newItemIcon"
+                  placeholder="Icon..."
+                  class="w-24 bg-neutral-800 border border-white/[0.12] rounded-md px-2 py-1.5 text-xs text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-lime-400/40"
+                  @keydown.enter="commitAddItem('sidebar')"
+                />
+              </div>
+
+              <button
+                class="mt-1 w-full border border-dashed border-white/[0.07] rounded-md py-1.5 text-xs text-neutral-600 hover:text-neutral-400 hover:border-white/[0.12] transition-colors cursor-pointer flex items-center justify-center gap-1"
+                @click="addingTo = 'sidebar'"
+              >
+                <PlusIcon class="size-3" /> Add sidebar item
+              </button>
             </div>
           </FieldGroup>
+
           <FieldGroup label="Top bar">
             <div class="flex flex-col gap-2">
-              <NavItemRow v-for="item in topNavItems" :key="item.label" :icon="item.icon" :label="item.label" :target="item.target" :target-variant="item.targetVariant" />
+              <NavItemRow
+                v-for="item in topBarItems"
+                :key="item.id"
+                :icon="HomeIcon"
+                :label="item.label"
+                :target="item.targetViewId ?? 'unlinked'"
+                target-variant="view"
+                @edit="() => {}"
+                @remove="removeNavItem(item.id, 'topbar')"
+              />
+
+              <div v-if="addingTo === 'topbar'" class="flex gap-2 mt-1">
+                <input
+                  v-model="newItemLabel"
+                  autofocus
+                  placeholder="Label..."
+                  class="flex-1 bg-neutral-800 border border-white/[0.12] rounded-md px-2 py-1.5 text-xs text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-lime-400/40"
+                  @keydown.enter="commitAddItem('topbar')"
+                  @keydown.escape="addingTo = null"
+                />
+                <input
+                  v-model="newItemIcon"
+                  placeholder="Icon..."
+                  class="w-24 bg-neutral-800 border border-white/[0.12] rounded-md px-2 py-1.5 text-xs text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-lime-400/40"
+                  @keydown.enter="commitAddItem('topbar')"
+                />
+              </div>
+
+              <button
+                class="mt-1 w-full border border-dashed border-white/[0.07] rounded-md py-1.5 text-xs text-neutral-600 hover:text-neutral-400 hover:border-white/[0.12] transition-colors cursor-pointer flex items-center justify-center gap-1"
+                @click="addingTo = 'topbar'"
+              >
+                <PlusIcon class="size-3" /> Add top bar item
+              </button>
             </div>
           </FieldGroup>
         </div>
@@ -179,9 +325,27 @@ function setShowBorder(val: boolean) {
         <SectionHeader title="User menu" />
         <div class="flex-1 overflow-y-auto p-6 max-w-md">
           <FieldGroup label="Avatar">
-            <FieldRow label="Show avatar"><BaseToggle :model-value="shell?.userMenu?.showAvatar ?? true" size="sm" /></FieldRow>
-            <FieldRow label="Name binding"><BaseInput :model-value="shell?.userMenu?.nameBinding ?? 'user.name'" :mono="true" /></FieldRow>
-            <FieldRow label="Email binding"><BaseInput :model-value="shell?.userMenu?.emailBinding ?? 'user.email'" :mono="true" /></FieldRow>
+            <FieldRow label="Show avatar">
+              <BaseToggle
+                :model-value="shell?.userMenu?.showAvatar ?? true"
+                size="sm"
+                @update:model-value="saveUserMenu({ showAvatar: $event })"
+              />
+            </FieldRow>
+            <FieldRow label="Name binding">
+              <BaseInput
+                :model-value="shell?.userMenu?.nameBinding ?? 'user.name'"
+                :mono="true"
+                @update:model-value="saveUserMenu({ nameBinding: $event })"
+              />
+            </FieldRow>
+            <FieldRow label="Email binding">
+              <BaseInput
+                :model-value="shell?.userMenu?.emailBinding ?? 'user.email'"
+                :mono="true"
+                @update:model-value="saveUserMenu({ emailBinding: $event })"
+              />
+            </FieldRow>
           </FieldGroup>
         </div>
       </template>
@@ -192,8 +356,8 @@ function setShowBorder(val: boolean) {
         <div class="flex-1 overflow-y-auto p-6 max-w-md">
           <FieldGroup label="Components">
             <div class="flex flex-col gap-2">
-              <NavItemRow :icon="MagnifyingGlassIcon" label="Command palette" target="⌘K" target-variant="action" />
-              <NavItemRow :icon="BellIcon" label="Toast notifications" target="component" target-variant="component" />
+              <NavItemRow :icon="MagnifyingGlassIcon" label="Command palette" target="⌘K" target-variant="action" @edit="() => {}" @remove="() => {}" />
+              <NavItemRow :icon="BellIcon" label="Toast notifications" target="component" target-variant="component" @edit="() => {}" @remove="() => {}" />
             </div>
           </FieldGroup>
         </div>
